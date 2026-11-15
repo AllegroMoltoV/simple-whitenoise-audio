@@ -73,6 +73,10 @@ jobs:
           curl -fsSL -o validator.zip "https://github.com/free-audio/clap-validator/releases/download/${CLAP_VALIDATOR_VERSION}/${VALIDATOR_ASSET}"
           echo "${VALIDATOR_SHA256}  validator.zip" | sha256sum -c -
           cmake -E tar xf validator.zip
+          # The Linux archive wraps the binary in a nested tarball.
+          for inner in *.tar.gz; do
+            if [ -e "$inner" ]; then cmake -E tar xzf "$inner"; fi
+          done
 
       - name: Validate
         env:
@@ -100,7 +104,7 @@ jobs:
           PYTHON: ${{ matrix.python }}
         run: |
           archive="dist/simple-whitenoise-${VERSION}-${PLATFORM}.zip"
-          listing=$("$PYTHON" -c 'import sys, zipfile; print("\n".join(sorted(zipfile.ZipFile(sys.argv[1]).namelist())))' "$archive")
+          listing=$("$PYTHON" -c 'import sys, zipfile; print("\n".join(sorted(zipfile.ZipFile(sys.argv[1]).namelist())))' "$archive" | tr -d '\r')
           echo "$listing"
           [ "$listing" = "$(printf 'LICENSE\nsimple-whitenoise.clap')" ]
           if [ "$PLATFORM" = "linux-x86_64" ]; then
