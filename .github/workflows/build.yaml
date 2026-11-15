@@ -13,6 +13,7 @@ permissions:
 
 env:
   CLAP_VALIDATOR_VERSION: 0.4.1
+  PLUGINVAL_VERSION: v2.0.0-beta3
 
 jobs:
   build:
@@ -22,19 +23,26 @@ jobs:
         include:
           - os: windows-2022
             platform: windows-x64
-            plugin: build/Release/simple-whitenoise.clap
+            vst3_binary: x86_64-win/simple-whitenoise.vst3
             validator_asset: clap-validator-0.4.1-127-g152b982-windows.zip
             validator_sha256: d935c3af0a45c3911ea2e900f4aa5d6709dac82bb485f0c4ce28648ab2cd0c10
             validator_exe: clap-validator.exe
+            pluginval_asset: pluginval_Windows.zip
+            pluginval_sha256: da158e918b60430c6a5223cd99cc2e746bda604e583258c400898caf4e95c523
+            pluginval_exe: pluginval.exe
             python: python
           - os: ubuntu-24.04
             platform: linux-x86_64
-            plugin: build/simple-whitenoise.clap
+            vst3_binary: x86_64-linux/simple-whitenoise.so
             validator_asset: clap-validator-0.4.1-127-g152b982-ubuntu-22.04.zip
             validator_sha256: 49edadcfb407ea0dd946ce418300e853fbd2660fa4b0d00e4f19ff8eef24ad90
             validator_exe: clap-validator
+            pluginval_asset: pluginval_Linux.zip
+            pluginval_sha256: 2e23d311c8c2664457b11be8f6cf4ed29cfdc08765c71c43934a1ed3360f118f
+            pluginval_exe: pluginval
             python: python3
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     defaults:
       run:
         shell: bash
@@ -57,18 +65,40 @@ jobs:
           fi
           echo "VERSION=$project_version" >> "$GITHUB_ENV"
 
+      # CMake downloads CLAP, clap-wrapper, and the VST 3 SDK at the commits and tags pinned in CMakeLists.txt.
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel
 
-      - name: Install clap-validator
+      # The validators below test the files in package/, which are the files that go into the archive.
+      - name: Package
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          cmake --install build --config Release --prefix package
+          mkdir -p dist
+          cd package
+          cmake -E tar cf "../dist/simple-whitenoise-${VERSION}-${PLATFORM}.zip" --format=zip -- *
+
+      # A published immutable release cannot be fixed, so the archive is checked before any tag is pushed.
+      # The check finds the plugins the way Audio Plugin Soko-kun scans archives.
+      - name: Check archive
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          PYTHON: ${{ matrix.python }}
+        run: |
+          "$PYTHON" -I .github/scripts/check-archive.py "dist/simple-whitenoise-${VERSION}-${PLATFORM}.zip" "$PLATFORM"
+
+      - name: Install validators
         env:
           VALIDATOR_ASSET: ${{ matrix.validator_asset }}
           VALIDATOR_SHA256: ${{ matrix.validator_sha256 }}
+          PLUGINVAL_ASSET: ${{ matrix.pluginval_asset }}
+          PLUGINVAL_SHA256: ${{ matrix.pluginval_sha256 }}
         run: |
-          mkdir -p "$RUNNER_TEMP/clap-validator"
+          mkdir -p "$RUNNER_TEMP/clap-validator" "$RUNNER_TEMP/pluginval"
           cd "$RUNNER_TEMP/clap-validator"
           curl -fsSL -o validator.zip "https://github.com/free-audio/clap-validator/releases/download/${CLAP_VALIDATOR_VERSION}/${VALIDATOR_ASSET}"
           echo "${VALIDATOR_SHA256}  validator.zip" | sha256sum -c -
@@ -77,41 +107,42 @@ jobs:
           for inner in *.tar.gz; do
             if [ -e "$inner" ]; then cmake -E tar xzf "$inner"; fi
           done
+          cd "$RUNNER_TEMP/pluginval"
+          curl -fsSL -o pluginval.zip "https://github.com/Tracktion/pluginval/releases/download/${PLUGINVAL_VERSION}/${PLUGINVAL_ASSET}"
+          echo "${PLUGINVAL_SHA256}  pluginval.zip" | sha256sum -c -
+          cmake -E tar xf pluginval.zip
 
-      - name: Validate
+      - name: Validate CLAP with clap-validator
         env:
-          PLUGIN: ${{ matrix.plugin }}
           VALIDATOR_EXE: ${{ matrix.validator_exe }}
         run: |
           validator=$(find "$RUNNER_TEMP/clap-validator" -name "$VALIDATOR_EXE" -type f | head -n 1)
           chmod +x "$validator"
-          "$validator" validate "$PLUGIN"
+          "$validator" validate package/simple-whitenoise.clap
 
-      - name: Package
-        env:
-          PLUGIN: ${{ matrix.plugin }}
-          PLATFORM: ${{ matrix.platform }}
+      # pluginval is a GUI application. On Linux it runs under Xvfb, which provides a virtual display.
+      - name: Install Xvfb
+        if: runner.os == 'Linux'
         run: |
-          mkdir -p package dist
-          cp "$PLUGIN" LICENSE package/
-          cd package
-          cmake -E tar cf "../dist/simple-whitenoise-${VERSION}-${PLATFORM}.zip" --format=zip simple-whitenoise.clap LICENSE
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb xauth
 
-      # A published immutable release cannot be fixed, so the archive is checked before any tag is pushed.
-      - name: Check archive
+      # pluginval 2 embeds the VST 3 SDK validator and runs it at strictness level 5 and above.
+      - name: Validate VST 3 with pluginval
         env:
-          PLATFORM: ${{ matrix.platform }}
-          PYTHON: ${{ matrix.python }}
+          PLUGINVAL_EXE: ${{ matrix.pluginval_exe }}
+          VST3_BINARY: ${{ matrix.vst3_binary }}
         run: |
-          archive="dist/simple-whitenoise-${VERSION}-${PLATFORM}.zip"
-          listing=$("$PYTHON" -c 'import sys, zipfile; print("\n".join(sorted(zipfile.ZipFile(sys.argv[1]).namelist())))' "$archive" | tr -d '\r')
-          echo "$listing"
-          [ "$listing" = "$(printf 'LICENSE\nsimple-whitenoise.clap')" ]
-          if [ "$PLATFORM" = "linux-x86_64" ]; then
-            exported=$(nm -D --defined-only build/simple-whitenoise.clap | awk '{print $3}')
-            echo "$exported"
-            echo "$exported" | grep -qx clap_entry
-            ! echo "$exported" | grep -qxE 'main|VSTPluginMain|main_macho'
+          test -s "package/simple-whitenoise.vst3/Contents/${VST3_BINARY}"
+          pluginval=$(find "$RUNNER_TEMP/pluginval" -name "$PLUGINVAL_EXE" -type f | head -n 1)
+          chmod +x "$pluginval"
+          set -- "$pluginval" validate --strictness-level 10 --output-dir "$RUNNER_TEMP/pluginval-logs" package/simple-whitenoise.vst3
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            # Missing shared libraries show up here before pluginval fails to start.
+            ldd "$pluginval"
+            xvfb-run -a "$@"
+          else
+            "$@"
           fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

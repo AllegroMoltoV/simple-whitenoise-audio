@@ -6,13 +6,13 @@
       "pattern": "simple-whitenoise-*-windows-x64.zip",
       "os": "windows",
       "arch": ["x86_64"],
-      "formats": ["clap"]
+      "formats": ["clap", "vst3"]
     },
     {
       "pattern": "simple-whitenoise-*-linux-x86_64.zip",
       "os": "linux",
       "arch": ["x86_64"],
-      "formats": ["clap"]
+      "formats": ["clap", "vst3"]
     }
   ]
 }
