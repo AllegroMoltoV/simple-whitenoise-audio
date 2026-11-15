@@ -1,7 +1,11 @@
 // Simple White Noise: a CLAP plugin that generates stereo white noise with one volume parameter.
+// clap-wrapper builds the VST 3 plugin from the same code.
 // SPDX-License-Identifier: MIT
 
+#include "plugin-entry.h"
+
 #include <clap/clap.h>
+#include <clapwrapper/vst3.h>
 
 #include <atomic>
 #include <cmath>
@@ -279,14 +283,20 @@ const clap_plugin_t *factoryCreatePlugin(const clap_plugin_factory_t *, const cl
 
 const clap_plugin_factory_t kFactory = {factoryGetPluginCount, factoryGetPluginDescriptor, factoryCreatePlugin};
 
-bool entryInit(const char *) { return true; }
-
-void entryDeinit() {}
-
-const void *entryGetFactory(const char *factoryId) {
-    return std::strcmp(factoryId, CLAP_PLUGIN_FACTORY_ID) == 0 ? &kFactory : nullptr;
-}
+// Without this, clap-wrapper fills the VST 3 factory's e-mail contact with the placeholder "info@".
+// The other members stay nullptr, so the VST 3 class ID is the one clap-wrapper derives from the CLAP ID.
+const clap_plugin_factory_as_vst3 kVst3FactoryInfo = {nullptr, kDescriptor.url, "", nullptr, nullptr};
 
 } // namespace
 
-extern "C" CLAP_EXPORT const clap_plugin_entry_t clap_entry = {CLAP_VERSION_INIT, entryInit, entryDeinit, entryGetFactory};
+bool swn_entry_init(const char *) { return true; }
+
+void swn_entry_deinit(void) {}
+
+const void *swn_entry_get_factory(const char *factoryId) {
+    if (std::strcmp(factoryId, CLAP_PLUGIN_FACTORY_ID) == 0) return &kFactory;
+    if (std::strcmp(factoryId, CLAP_PLUGIN_FACTORY_INFO_VST3) == 0 ||
+        std::strcmp(factoryId, CLAP_PLUGIN_FACTORY_INFO_VST3_V1) == 0)
+        return &kVst3FactoryInfo;
+    return nullptr;
+}
