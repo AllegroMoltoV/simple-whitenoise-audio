@@ -2,6 +2,8 @@
 
 [English](#english) | [日本語](#日本語)
 
+Listed on [Audio Plugin Soko-kun](https://audio-soko-kun.allegromoltov.jp/plugins/allegromoltov/simple-whitenoise-audio?lang=en), which links only to releases that passed its checks. / 音のプラグイン倉庫くんの[掲載ページ](https://audio-soko-kun.allegromoltov.jp/plugins/allegromoltov/simple-whitenoise-audio)から、検査を通った版を入手できます。
+
 ## English
 
 Simple White Noise is a CLAP plugin that generates stereo white noise. It has a single parameter, Volume.
