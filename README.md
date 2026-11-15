@@ -119,6 +119,10 @@ MIT License です。[LICENSE](LICENSE) を参照してください。CLAP は�
 
 ## Changelog
 
+### 1.0.1
+
+- Declared the category and the archives in `.audio-soko-kun/config.json`. The plugin itself is unchanged.
+
 ### 1.0.0
 
 - First release. Stereo white noise with one volume parameter, for Windows x64 and Linux x86_64.

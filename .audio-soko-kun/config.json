@@ -1,3 +1,18 @@
 {
-  "name": "Simple White Noise"
+  "name": "Simple White Noise",
+  "category": "instrument",
+  "assets": [
+    {
+      "pattern": "simple-whitenoise-*-windows-x64.zip",
+      "os": "windows",
+      "arch": ["x86_64"],
+      "formats": ["clap"]
+    },
+    {
+      "pattern": "simple-whitenoise-*-linux-x86_64.zip",
+      "os": "linux",
+      "arch": ["x86_64"],
+      "formats": ["clap"]
+    }
+  ]
 }
